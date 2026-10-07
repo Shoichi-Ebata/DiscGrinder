@@ -1,77 +1,107 @@
-//Xiao RP2040
-//2204/260KV
-//DC12V-1A
-
+// Xiao RP2040
+// 2204/260KV
+// DC12V-1A
 
 #include "Servo.h"
 #include "Adafruit_NeoPixel.h"
 
-const int ESC_PIN = D0;  // GP0 (D0) ピン ➔ ESCの信号線(S)へ
-const int SW_PIN = D1;   // GP1 (D1) ピン ➔ タクトスイッチへ
+const int ESC_PIN = D0;  // GP0 (D0) ➔ ESC信号線
+const int SW_PIN = D1;   // GP1 (D1) ➔ タクトスイッチ
 
 // XIAO RP2040 オンボードRGB LEDの設定
-#define RGB_PWR 11  // RGB LEDの電源ピン (GP11)
-#define RGB_PIN 12  // RGB LEDのデータピン (GP12)
+#define RGB_PWR 11  // RGB LED Power
+#define RGB_PIN 12  // RGB LED Data
 #define NUMPIXELS 1
 
 Adafruit_NeoPixel pixels(NUMPIXELS, RGB_PIN, NEO_GRB + NEO_KHZ800);
-
 Servo esc;
 
-bool isRunning = false;
+// 状態管理: 0=停止, 1=弱, 2=中, 3=強
+int stepState = 0;
 bool lastSwState = HIGH;
 
-// 色設定関数（RGB順/明るさ調整済み）
+// 各段階のパルス幅 (us)
+const int PULSE_OFF  = 900;
+const int PULSE_LOW  = 1263;  // (2000-900)/3 * 1 + 900
+const int PULSE_MED  = 1630;  // (2000-900)/3 * 2 + 900
+const int PULSE_HIGH = 2000;
+
+// 色設定ヘルパー
 void setColor(byte r, byte g, byte b) {
   pixels.setPixelColor(0, pixels.Color(r, g, b));
   pixels.show();
 }
 
 void setup() {
-  // RGB LEDの電源有効化と初期化
   pinMode(RGB_PWR, OUTPUT);
-  digitalWrite(RGB_PWR, HIGH);  // RGB LEDへ給電ON
+  digitalWrite(RGB_PWR, HIGH);
   pixels.begin();
-  pixels.setBrightness(30);  // 明るさを抑制（眩しさ防止）
+  pixels.setBrightness(40); // 最大輝度（パターン制御側で調整）
 
   pinMode(SW_PIN, INPUT_PULLUP);
-
-  // 下限を 900us 〜 上限 2000us に広げて割り当て
   esc.attach(ESC_PIN, 900, 2000);
 
-  // 【フェーズ1：起動中（赤色点滅）】
-  // 約2秒間の初期化待ち中に赤色を点滅（0.25秒×4回）
+  // 【初期化：赤色点滅】
   for (int i = 0; i < 4; i++) {
-    setColor(255, 0, 0);         // 赤点灯
-    esc.writeMicroseconds(900);  // ロック解除のため900usを継続送信
+    setColor(255, 0, 0);
+    esc.writeMicroseconds(PULSE_OFF);
     delay(250);
-    setColor(0, 0, 0);  // 消灯
+    setColor(0, 0, 0);
     delay(250);
   }
 
-  // 【フェーズ2：準備OK（緑色点灯）】
-  setColor(0, 255, 0);  // 緑点灯（待機中）
+  // 初期状態: 停止
+  applyStateChange();
+}
+
+// 状態が切り替わった瞬間にモータ出力を更新
+void applyStateChange() {
+  switch (stepState) {
+    case 0: esc.writeMicroseconds(PULSE_OFF); break;
+    case 1: esc.writeMicroseconds(PULSE_LOW); break;
+    case 2: esc.writeMicroseconds(PULSE_MED); break;
+    case 3: esc.writeMicroseconds(PULSE_HIGH); break;
+  }
 }
 
 void loop() {
+  // --- スイッチ入力検知 ---
   bool currentSwState = digitalRead(SW_PIN);
-
   if (lastSwState == HIGH && currentSwState == LOW) {
-    isRunning = !isRunning;
-
-    if (isRunning) {
-      // 【フェーズ3：動作中（青色点灯）】
-      setColor(0, 0, 255);          // 青点灯
-      esc.writeMicroseconds(2000);  // 100% 全開
-    } else {
-      // 【フェーズ2に戻る：準備OK（緑色点灯）】
-      setColor(0, 255, 0);         // 緑点灯
-      esc.writeMicroseconds(900);  // 停止
-    }
-
+    stepState = (stepState + 1) % 4;
+    applyStateChange();
     delay(50);  // チャタリング防止
   }
-
   lastSwState = currentSwState;
-  delay(10);
+
+  // --- LEDアニメーション制御 (ノンブロッキング) ---
+  unsigned long currentMillis = millis();
+
+  switch (stepState) {
+    case 0: // 停止：緑色常時点灯
+      setColor(0, 255, 0);
+      break;
+
+    case 1: { // 弱：ホタルのような柔らかな青色ブリージング（サイン波風）
+      // 3000ms周期で明るさを0〜255の間で滑らかに変化
+      float angle = (currentMillis % 3000) * (2.0 * 3.14159 / 3000.0);
+      byte brightness = (sin(angle - 1.5708) + 1.0) / 2.0 * 200 + 10; // 10〜210
+      setColor(0, 0, brightness);
+      break;
+    }
+
+    case 2: // 中：1秒周期フラッシュ（0.5秒ON / 0.5秒OFF）
+      if ((currentMillis / 500) % 2 == 0) {
+        setColor(0, 0, 255); // 青点灯
+      } else {
+        setColor(0, 0, 0);   // 消灯
+      }
+      break;
+
+    case 3: // 強：青色常時点灯
+      setColor(0, 0, 255);
+      break;
+  }
+
+  delay(10); // ループ周期
 }
