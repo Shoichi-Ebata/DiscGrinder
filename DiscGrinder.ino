@@ -5,9 +5,9 @@
 #include "Servo.h"
 
 // ---------- ピン ----------
-const int ESC_PIN = D0;     // GPIO26 ➔ ESC信号線
-const int SW_PIN = D1;      // GPIO27 ➔ タクトスイッチ
-const int SENSOR_PIN = D2;  // GPIO28 ➔ LBR-127HLD 受光出力
+const int ESC_PIN = 26;     // GPIO26 ➔ ESC信号線
+const int SW_PIN = 27;      // GPIO27 ➔ タクトスイッチ
+const int SENSOR_PIN = 28;  // GPIO28 ➔ LBR-127HLD 受光出力
 
 // 個別LEDピン (GPIO番号指定)
 const int LED_RED_PIN = 29;   // GPIO29 (D3) ➔ 赤LED
