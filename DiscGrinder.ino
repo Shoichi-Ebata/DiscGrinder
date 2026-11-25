@@ -15,7 +15,7 @@ const int LED_BLUE_PIN = 6;   // GPIO6  (D4) ➔ 青LED
 const int LED_GREEN_PIN = 7;  // GPIO7  (D5) ➔ 緑LED
 
 // ---------- ESC パルス幅 (us) ----------
-const int PULSE_OFF = 900;
+const int PULSE_OFF = 1000;
 const int PULSE_LOW = 1263;
 const int PULSE_MED = 1630;
 const int PULSE_HIGH = 2000;
