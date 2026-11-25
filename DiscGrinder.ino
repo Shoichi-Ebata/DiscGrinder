@@ -1,19 +1,18 @@
-// XIAO RP2040: ESC制御 + RPM計測 + ロック検知 統合スケッチ
+// XIAO RP2040: ESC制御 + RPM計測 + ロック検知 統合スケッチ（個別3色LED版）
 // モーター: 2204 / 260KV, DC12V-1A
 // センサ  : LBR-127HLD（受光側 3.3V-6kΩ-P分岐、テープ通過でLOW）
 
 #include "Servo.h"
-#include "Adafruit_NeoPixel.h"
 
 // ---------- ピン ----------
 const int ESC_PIN = D0;     // GPIO26 ➔ ESC信号線
 const int SW_PIN = D1;      // GPIO27 ➔ タクトスイッチ
-const int SENSOR_PIN = D2;  // GPIO28 ➔ LBR-127HLD 受光出力（旧D0から配線を移す）
+const int SENSOR_PIN = D2;  // GPIO28 ➔ LBR-127HLD 受光出力
 
-// XIAO RP2040 オンボードRGB LED
-#define RGB_PWR 11
-#define RGB_PIN 12
-#define NUMPIXELS 1
+// 個別LEDピン (GPIO番号指定)
+const int LED_RED_PIN = 29;   // GPIO29 (D3) ➔ 赤LED
+const int LED_BLUE_PIN = 6;   // GPIO6  (D4) ➔ 青LED
+const int LED_GREEN_PIN = 7;  // GPIO7  (D5) ➔ 緑LED
 
 // ---------- ESC パルス幅 (us) ----------
 const int PULSE_OFF = 900;
@@ -28,7 +27,6 @@ const uint32_t RUN_STALL_MS = 250;      // 回転中、この時間パルスが�
 const uint32_t MAX_PERIOD_US = 150000;  // 1回転が150ms超（約400RPM未満）ならロック（ガクガク対策）
 const uint32_t REPORT_MS = 500;         // RPM算出・表示の周期
 
-Adafruit_NeoPixel pixels(NUMPIXELS, RGB_PIN, NEO_GRB + NEO_KHZ800);
 Servo esc;
 
 // 状態管理: 0=停止, 1=弱, 2=中, 3=強
@@ -50,11 +48,13 @@ float rpm = 0;
 // ---------- LED ----------
 uint32_t lastColor = 0xFFFFFFFF;
 void setColor(byte r, byte g, byte b) {
-  uint32_t c = pixels.Color(r, g, b);
+  uint32_t c = ((uint32_t)r << 16) | ((uint32_t)g << 8) | b;
   if (c == lastColor) return;  // 変化がなければ書き込まない
   lastColor = c;
-  pixels.setPixelColor(0, c);
-  pixels.show();
+
+  digitalWrite(LED_RED_PIN, r > 0 ? HIGH : LOW);
+  digitalWrite(LED_GREEN_PIN, g > 0 ? HIGH : LOW);
+  digitalWrite(LED_BLUE_PIN, b > 0 ? HIGH : LOW);
 }
 
 // ---------- センサ割り込み ----------
@@ -115,10 +115,11 @@ void applyStateChange() {
 void setup() {
   Serial.begin(115200);
 
-  pinMode(RGB_PWR, OUTPUT);
-  digitalWrite(RGB_PWR, HIGH);
-  pixels.begin();
-  pixels.setBrightness(40);
+  // 個別LEDピンの初期化
+  pinMode(LED_RED_PIN, OUTPUT);
+  pinMode(LED_BLUE_PIN, OUTPUT);
+  pinMode(LED_GREEN_PIN, OUTPUT);
+  setColor(0, 0, 0);
 
   pinMode(SW_PIN, INPUT_PULLUP);
   pinMode(SENSOR_PIN, INPUT);  // 外付け6kΩでプルアップ済み
